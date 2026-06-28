@@ -9,7 +9,8 @@ public class Main {
     public static void main(String[] args) {
       VanillaContext context = Vanilla.start(Main.class);
       OrderService service = context.getItem(OrderService.class);
-      service.CreateRepo();
+      service.sendMessage("Hello World");
+
 
     }
 }

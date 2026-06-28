@@ -63,16 +63,31 @@ public class ScoopFactory {
 
                     for (Class<?> parameterType : parameterTypes) {
                         Object object = context.get(parameterType);
+
+                        if (object == null) {
+                            for(Object createScoop : context.values()) {
+                                if(parameterType.isAssignableFrom(createScoop.getClass())) {
+                                    object = createScoop;
+                                    System.out.println("🍦 [ПОЛИМОРФИЗМ] Для интерфейса " + parameterType.getSimpleName()
+                                            + " нашли реализацию: " + object.getClass().getSimpleName());
+                                    break;
+                                }
+                            }
+
+                        }
+
                         if (object != null) {
                             objects.add(object);
-                            continue;
                         }
-                        ready = false;
-                        break;
+                        else {
+                            ready = false;
+                            break;
+                        }
                     }
 
                     if (ready) {
                         context.put(clazz, targetConstructor.newInstance(objects.toArray()));
+                        System.out.println("🍦 Успешно создали scoop: " + clazz.getSimpleName()); // <-- ДОБ
                         iterator.remove();
                     }
                 }

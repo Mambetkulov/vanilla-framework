@@ -6,15 +6,20 @@ import com.customframework.repo.OrderRepository;
 
 @Component
 public class OrderService {
-    private final OrderRepository orderRepository;
+//    private final OrderRepository orderRepository;
+    private final NotificationService notificationService;
 
     @Inject
-    public OrderService(OrderRepository orderRepository) {
-        this.orderRepository = orderRepository;
+    public OrderService(NotificationService notificationService) {
+        this.notificationService = notificationService;
+    }
+
+    public void sendMessage(String message) {
+        notificationService.sendNotification(message);
     }
 
     public void CreateRepo () {
-        System.out.println("Создаем заказ...");
-        orderRepository.save();
+//        System.out.println("Создаем заказ...");
+//        orderRepository.save();
     }
 }
