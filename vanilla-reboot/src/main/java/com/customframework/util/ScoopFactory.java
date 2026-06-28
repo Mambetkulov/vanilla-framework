@@ -22,16 +22,12 @@ public class ScoopFactory {
         try {
             for (Class<?> clazz : componentClasses) {
                 if (clazz.isAnnotationPresent(Component.class)) {
-                    boolean isComplex = false;
-                    for (Constructor<?> constructor : clazz.getDeclaredConstructors()) {
-                        if (constructor.isAnnotationPresent(Inject.class)) {
-                            isComplex = true;
-                            complexContext.add(clazz);
-                            break;
-                        }
-                    }
+                    boolean isComplex = isItComplex(clazz);
 
-                    if (!isComplex) {
+                    if(isComplex) {
+                        complexContext.add(clazz);
+                    }
+                    else {
                         context.put(clazz, clazz.getDeclaredConstructor().newInstance());
                     }
                 }
@@ -47,13 +43,7 @@ public class ScoopFactory {
                     List<Object> objects = new ArrayList<>();
                     boolean ready = true;
 
-                    Constructor<?> targetConstructor = null;
-                    for (Constructor<?> con : clazz.getDeclaredConstructors()) {
-                        if (con.isAnnotationPresent(Inject.class)) {
-                            targetConstructor = con;
-                            break; // Нашли — сразу выходим из этого микро-поиска
-                        }
-                    }
+                    Constructor<?> targetConstructor = getTargetConstructor(clazz);
 
                     if (targetConstructor == null) {
                         continue;
@@ -73,7 +63,6 @@ public class ScoopFactory {
                                     break;
                                 }
                             }
-
                         }
 
                         if (object != null) {
@@ -104,6 +93,46 @@ public class ScoopFactory {
             log.error("Scoop instantiation failed", e);
             throw new RuntimeException(e);
         }
+    }
+
+
+
+    private static boolean isItComplex(Class<?> clazz) {
+        boolean isComplex = false;
+        Constructor<?>[] constructors = clazz.getConstructors();
+
+        if(constructors.length == 1 && constructors[0].getParameterCount() > 0) {
+            isComplex = true;
+        }
+        else {
+            for (Constructor<?> constructor : constructors) {
+                if (constructor.isAnnotationPresent(Inject.class)) {
+                    isComplex = true;
+                    break;
+                }
+            }
+        }
+        return isComplex;
+    }
+
+
+
+    private static Constructor<?> getTargetConstructor(Class<?> clazz) {
+        Constructor<?> targetConstructor = null;
+        Constructor<?>[] constructors = clazz.getDeclaredConstructors();
+
+        if(constructors.length == 1 && constructors[0].getParameterTypes().length > 0) {
+            targetConstructor = constructors[0];
+        }
+        else {
+            for (Constructor<?> con : constructors) {
+                if (con.isAnnotationPresent(Inject.class)) {
+                    targetConstructor = con;
+                    break; // Нашли — сразу выходим из этого микро-поиска
+                }
+            }
+        }
+        return targetConstructor;
     }
 
 
