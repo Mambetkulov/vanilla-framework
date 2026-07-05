@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.*;
 
 public class ScoopFactory {
@@ -48,10 +50,33 @@ public class ScoopFactory {
                     if (targetConstructor == null) {
                         continue;
                     }
+
                     // 3. Работаем строго с параметрами ЭТОГО конструктора (без лишних циклов!)
                     Class<?>[] parameterTypes = targetConstructor.getParameterTypes();
 
+                    int index = -1;
+
                     for (Class<?> parameterType : parameterTypes) {
+
+                        index++;
+
+                        if(parameterType == List.class) {
+
+                            Type gen = targetConstructor.getGenericParameterTypes()[index];
+                            ParameterizedType pt = (ParameterizedType) gen;
+                            Class<?> typeArgument = (Class<?>) pt.getActualTypeArguments()[0];
+
+                            List<Object> list = fillDataStructure(typeArgument);
+
+                            if(list == null) {
+                                ready = false;
+                                break;
+                            }
+
+                            objects.add(list);
+                            continue;
+                        }
+
                         Object object = context.get(parameterType);
 
                         if (object == null) {
@@ -133,6 +158,33 @@ public class ScoopFactory {
             }
         }
         return targetConstructor;
+    }
+
+
+    private List<Object> fillDataStructure(Class<?> targetClass) {
+        for(Class<?> complex : complexContext) {
+            if(targetClass.isAssignableFrom(complex)) {
+                return null;
+            }
+        }
+
+        List<Object> classes = new ArrayList<>();
+
+        Object object = context.get(targetClass);
+
+        if(object == null) {
+            for(Object clazz : context.values()) {
+                if(targetClass.isAssignableFrom(clazz.getClass())) {
+                    classes.add(clazz);
+                }
+            }
+        }
+
+        if(object != null) {
+            classes.add(object);
+        }
+        return classes;
+
     }
 
 
