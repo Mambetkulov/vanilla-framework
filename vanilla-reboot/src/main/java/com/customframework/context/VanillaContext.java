@@ -36,4 +36,8 @@ public class VanillaContext {
     public <T> T getItem(Class<T> contextClass) {
         return (T) context.get(contextClass);
     }
+
+    public Map<Class<?>, Object> getMap() {
+        return context;
+    }
 }
