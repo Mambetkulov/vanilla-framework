@@ -14,7 +14,7 @@ public class Main {
       System.out.println("=== ✅ КОНТЕКСТ УСПЕШНО ПОДНЯТ ===\n");
       OrderService service = context.getItem(OrderService.class);
       service.sendMessage("Hello World");
-
+      System.out.println("context size : " + context.getMap().size());
       IceCreamOrderService orderService = (IceCreamOrderService) context.getItem(IceCreamOrderService.class);
       orderService.serve();
 

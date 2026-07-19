@@ -3,10 +3,12 @@ package com.customframework.util;
 
 import com.customframework.annotation.Component;
 import com.customframework.annotation.Inject;
+import com.customframework.annotation.PostConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.*;
@@ -30,7 +32,9 @@ public class ScoopFactory {
                         complexContext.add(clazz);
                     }
                     else {
-                        context.put(clazz, clazz.getDeclaredConstructor().newInstance());
+                        Object object = clazz.getDeclaredConstructor().newInstance();
+                        context.put(clazz, object);
+                        invokePostConstructor(object);
                     }
                 }
             }
@@ -100,8 +104,10 @@ public class ScoopFactory {
                     }
 
                     if (ready) {
-                        context.put(clazz, targetConstructor.newInstance(objects.toArray()));
-                        System.out.println("🍦 Успешно создали scoop: " + clazz.getSimpleName()); // <-- ДОБ
+                        Object object = targetConstructor.newInstance(objects.toArray());
+                        context.put(clazz,object);
+                        System.out.println("🍦 Успешно создали scoop: " + clazz.getSimpleName());// <-- ДОБ
+                        invokePostConstructor(object);
                         iterator.remove();
                     }
                 }
@@ -112,6 +118,12 @@ public class ScoopFactory {
                     iterationSwitch = false;
                 }
             }
+
+//            for(Object obj : context.values()) {
+//                invokePostConstructor(obj);
+//            }
+
+
             return context;
 
         } catch (Exception e) {
@@ -119,6 +131,8 @@ public class ScoopFactory {
             throw new RuntimeException(e);
         }
     }
+
+
 
 
 
@@ -185,6 +199,32 @@ public class ScoopFactory {
         }
         return classes;
 
+    }
+
+    private void invokePostConstructor (Object scoop) {
+        Class<?> targetClass = scoop.getClass();
+
+        for(Method method : targetClass.getDeclaredMethods()) {
+            if(method.isAnnotationPresent(PostConstructor.class)) {
+                if(method.getParameterTypes().length > 0 ) {
+                   throw new IllegalStateException("Метод @PostConstruct в классе " +
+                            targetClass.getName() + " не должен иметь параметров!");
+                }
+
+                if(method.getReturnType() != void.class) {
+                    throw new IllegalStateException("Метод @PostConstruct в классе " +
+                            targetClass.getName() + " не должен быть возвращающим!");
+                }
+
+                try {
+                    method.setAccessible(true);
+                    method.invoke(scoop);
+                } catch (Exception e) {
+                    throw new RuntimeException("Не удалось вызвать @PostConstruct для бина "
+                            + targetClass.getName(), e);
+                }
+            }
+        }
     }
 
 
