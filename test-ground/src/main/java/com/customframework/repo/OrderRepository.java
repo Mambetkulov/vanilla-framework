@@ -1,8 +1,10 @@
 package com.customframework.repo;
 
+import com.customframework.Scope;
 import com.customframework.annotation.Component;
 import com.customframework.annotation.PostConstructor;
 import com.customframework.annotation.Repository;
+import com.customframework.annotation.ScoopScope;
 
 @Repository
 public class OrderRepository {

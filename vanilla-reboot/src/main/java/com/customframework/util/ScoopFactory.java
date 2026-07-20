@@ -1,16 +1,15 @@
 package com.customframework.util;
 
 
+import com.customframework.Scope;
 import com.customframework.annotation.Component;
 import com.customframework.annotation.Inject;
 import com.customframework.annotation.PostConstructor;
+import com.customframework.annotation.ScoopScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
+import java.lang.reflect.*;
 import java.util.*;
 
 public class ScoopFactory {
@@ -18,6 +17,7 @@ public class ScoopFactory {
 
     private final Map<Class<?>, Object> context = new HashMap<>();
     private final List<Class<?>> complexContext = new ArrayList<>();
+    private final List<String> prototypes = new ArrayList<>();
 
 
 
@@ -26,6 +26,11 @@ public class ScoopFactory {
         try {
             for (Class<?> clazz : componentClasses) {
                 if (clazz.isAnnotationPresent(Component.class)) {
+
+                    if(checkScoopScope(clazz)) {
+                        continue;
+                    }
+
                     boolean isComplex = isItComplex(clazz);
 
                     if(isComplex) {
@@ -79,6 +84,10 @@ public class ScoopFactory {
 
                             objects.add(list);
                             continue;
+                        }
+
+                        if(prototypes.contains(parameterType.getSimpleName())) {
+
                         }
 
                         Object object = context.get(parameterType);
@@ -226,6 +235,20 @@ public class ScoopFactory {
             }
         }
     }
+
+
+    private boolean checkScoopScope(Class<?> clazz) {
+        ScoopScope annotation = clazz.getAnnotation(ScoopScope.class);
+        Scope scope = annotation.value();
+        if(scope == Scope.PROTOTYPE) {
+            prototypes.add(clazz.getSimpleName());
+            return true;
+        }
+        return false;
+    }
+
+
+
 
 
 }
