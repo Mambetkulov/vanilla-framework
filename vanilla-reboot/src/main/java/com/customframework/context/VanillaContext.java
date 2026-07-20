@@ -10,9 +10,11 @@ import com.customframework.util.ScoopFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public class VanillaContext {
     private static final Logger log = LoggerFactory.getLogger(VanillaContext.class);
     private final Map<Class<?>, Object> context;
+
 
 
 
@@ -38,6 +40,8 @@ public class VanillaContext {
     }
 
     public Map<Class<?>, Object> getMap() {
+
         return context;
     }
+
 }
