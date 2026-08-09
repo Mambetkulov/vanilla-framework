@@ -6,7 +6,7 @@ import com.customframework.annotation.PostConstructor;
 import com.customframework.annotation.Repository;
 import com.customframework.annotation.ScoopScope;
 
-@Repository
+@Component
 public class OrderRepository {
 
     public void save() {

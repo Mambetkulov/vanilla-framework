@@ -9,6 +9,7 @@ import com.customframework.annotation.ScoopScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
 
@@ -17,7 +18,13 @@ public class ScoopFactory {
 
     private final Map<Class<?>, Object> context = new HashMap<>();
     private final List<Class<?>> complexContext = new ArrayList<>();
-    private final List<String> prototypes = new ArrayList<>();
+    private final List<Class<?>> prototypes = new ArrayList<>();
+
+
+    public List<Class<?>> getPrototypes() {
+        return prototypes;
+    }
+
 
 
 
@@ -31,7 +38,7 @@ public class ScoopFactory {
                         continue;
                     }
 
-                    boolean isComplex = isItComplex(clazz);
+                    boolean isComplex = isItComplex(clazz); // sorting classes ( simple bean and complex bean )
 
                     if(isComplex) {
                         complexContext.add(clazz);
@@ -46,12 +53,16 @@ public class ScoopFactory {
 
             boolean iterationSwitch = true;
 
-            while (iterationSwitch) {
-                Iterator<Class<?>> iterator = complexContext.iterator();
+
+            while (iterationSwitch) { // first iteration, we need this in case we can't find all needed dependencies in one lap
+                                      // to find all dependencies we need to iterate over and over until we find them all
+
+                Iterator<Class<?>> iterator = complexContext.iterator(); // we need to remove a complex object from list if all its dependencies are founded
                 int complexSize = complexContext.size();
-                while (iterator.hasNext()) {
+                while (iterator.hasNext()) { // here's where we start our actual lap
+
                     Class<?> clazz = iterator.next();
-                    List<Object> objects = new ArrayList<>();
+                    List<Object> objects = new ArrayList<>(); // new list so we can store found dependencies for a complex object
                     boolean ready = true;
 
                     Constructor<?> targetConstructor = getTargetConstructor(clazz);
@@ -86,22 +97,20 @@ public class ScoopFactory {
                             continue;
                         }
 
-                        if(prototypes.contains(parameterType.getSimpleName())) {
+                        Object object;
 
-                        }
+                        object = createOrGetScoop(parameterType);
 
-                        Object object = context.get(parameterType);
-
-                        if (object == null) {
-                            for(Object createScoop : context.values()) {
-                                if(parameterType.isAssignableFrom(createScoop.getClass())) {
-                                    object = createScoop;
-                                    System.out.println("🍦 [ПОЛИМОРФИЗМ] Для интерфейса " + parameterType.getSimpleName()
-                                            + " нашли реализацию: " + object.getClass().getSimpleName());
-                                    break;
-                                }
-                            }
-                        }
+//                        if (object == null) {
+//                            for(Object createScoop : context.values()) {
+//                                if(parameterType.isAssignableFrom(createScoop.getClass())) {
+//                                    object = createScoop;
+//                                    System.out.println("🍦 [ПОЛИМОРФИЗМ] Для интерфейса " + parameterType.getSimpleName()
+//                                            + " нашли реализацию: " + object.getClass().getSimpleName());
+//                                    break;
+//                                }
+//                            }
+//                        }
 
                         if (object != null) {
                             objects.add(object);
@@ -132,6 +141,7 @@ public class ScoopFactory {
 //                invokePostConstructor(obj);
 //            }
 
+            System.out.println("this is our prototypes size : " + prototypes.size());
 
             return context;
 
@@ -238,17 +248,108 @@ public class ScoopFactory {
 
 
     private boolean checkScoopScope(Class<?> clazz) {
+        System.out.println("this is clazz: " + clazz.getSimpleName());
         ScoopScope annotation = clazz.getAnnotation(ScoopScope.class);
-        Scope scope = annotation.value();
-        if(scope == Scope.PROTOTYPE) {
-            prototypes.add(clazz.getSimpleName());
+
+        if (annotation != null && annotation.value() == Scope.PROTOTYPE) {
+            prototypes.add(clazz);
+            System.out.println("prototypes: " + clazz.getSimpleName());
             return true;
         }
+
+        System.out.println("this is the end of check : " + clazz.getSimpleName());
+
         return false;
     }
 
 
+    public Object createOrGetScoop(Class<?> clazz) {
+      try {
 
+          System.out.println("create or get Scoop method ");
+
+          List<Object> depends = new ArrayList<>();
+          Object object = context.get(clazz);
+
+          if (object != null) {
+              System.out.println("⚠️ [DEBUG] " + clazz.getSimpleName() + " найден в context (СИНГЛТОН)!");
+              return object;
+          }
+
+          System.out.println("we are in the middle of something");
+
+          if (prototypes.contains(clazz)) {
+              System.out.println("⚡ [DEBUG] " + clazz.getSimpleName() + " создается как ПРОТОТИП!");
+
+              if (isItComplex(clazz)) {
+
+                  Constructor<?> constructor = getTargetConstructor(clazz);
+                  if (constructor != null) {
+                      for (Class<?> parameterType : constructor.getParameterTypes()) {
+                          Object depend = createOrGetScoop(parameterType);
+
+                          if (depend != null) {
+                              depends.add(depend);
+                          } else {
+                              throw new IllegalStateException
+                                      ("a dependency called " + parameterType.getSimpleName() + " is not found");
+                          }
+                      }
+                      Object complexObject =  constructor.newInstance(depends.toArray());
+                      invokePostConstructor(complexObject);
+                      return complexObject;
+
+                  }
+
+              } else {
+                  Object newInstance = clazz.getDeclaredConstructor().newInstance();
+                  invokePostConstructor(newInstance);
+                  return newInstance;
+
+              }
+          }
+          return findImplementation(clazz);
+      } catch (Exception e) {
+          System.out.println("something went wrong here it's message : " + e.getMessage());
+          throw new RuntimeException(e);
+      }
+    }
+
+
+    private Object findImplementation(Class<?> parameterType) {
+        System.out.println("find implementation for " + parameterType.getSimpleName());
+
+            for(Object createScoop : context.values()) {
+                if(parameterType.isAssignableFrom(createScoop.getClass())) {
+                    System.out.println("🍦 [ПОЛИМОРФИЗМ] Для интерфейса " + parameterType.getSimpleName()
+                            + " нашли реализацию-синглтон: " + createScoop.getClass().getSimpleName());
+                    return createScoop;
+                }
+            }
+
+            for(Class<?> protoClass : prototypes) {
+                if(parameterType.isAssignableFrom(protoClass)) {
+                    Object object1 = createOrGetScoop(protoClass);
+                    System.out.println("🍦 [ПОЛИМОРФИЗМ] Для интерфейса " + parameterType.getSimpleName()
+                                + " нашли реализацию-прототип: " + protoClass.getSimpleName());
+
+                        return object1;
+
+                    }
+                }
+
+        return null;
+    }
+
+
+    private boolean isScoop(Class<?> clazz) {
+        for(Annotation anotation : clazz.getAnnotations()) {
+            if(anotation.annotationType().isAnnotationPresent(Component.class)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
 
 }

@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 public class VanillaContext {
     private static final Logger log = LoggerFactory.getLogger(VanillaContext.class);
     private final Map<Class<?>, Object> context;
+    private final ScoopFactory scoopFactory;
 
 
 
@@ -24,7 +25,7 @@ public class VanillaContext {
         ClassPathScanner scanner = new ClassPathScanner();
         List<Class<?>> foundClasses = scanner.scan(contextClass);
 
-        ScoopFactory scoopFactory = new ScoopFactory();
+        scoopFactory = new ScoopFactory();
         this.context = scoopFactory.instantiate(foundClasses);
 
         log.info("VanillaContext initialized successfully with {} scoops!", context.size());
@@ -36,12 +37,18 @@ public class VanillaContext {
 
     @SuppressWarnings("unchecked")
     public <T> T getItem(Class<T> contextClass) {
-        return (T) context.get(contextClass);
+        Object object = scoopFactory.createOrGetScoop(contextClass);
+        return (T) object;
     }
 
     public Map<Class<?>, Object> getMap() {
 
         return context;
+    }
+
+
+    public ScoopFactory getScoopFactory() {
+        return scoopFactory;
     }
 
 }
