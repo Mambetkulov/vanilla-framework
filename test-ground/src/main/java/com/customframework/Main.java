@@ -12,6 +12,7 @@ import com.customframework.util.ScoopFactory;
 // click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
     public static void main(String[] args) {
+      System.out.println("hello world");
       VanillaContext context = Vanilla.start(Main.class);
       ScoopFactory scoopFactory = context.getScoopFactory();
       System.out.println("=== 🚀 ЗАПУСК КОНТЕКСТА VANILLA ===");
