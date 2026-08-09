@@ -32,7 +32,7 @@ public class ScoopFactory {
 
         try {
             for (Class<?> clazz : componentClasses) {
-                if (clazz.isAnnotationPresent(Component.class)) {
+                if (isScoop(clazz)) {
 
                     if(checkScoopScope(clazz)) {
                         continue;
@@ -41,10 +41,12 @@ public class ScoopFactory {
                     boolean isComplex = isItComplex(clazz); // sorting classes ( simple bean and complex bean )
 
                     if(isComplex) {
+                        System.out.println("scoop " + clazz.getSimpleName() + " was added to complex context");
                         complexContext.add(clazz);
                     }
                     else {
                         Object object = clazz.getDeclaredConstructor().newInstance();
+                        System.out.println("scoop " + clazz.getSimpleName() + " was added to context");
                         context.put(clazz, object);
                         invokePostConstructor(object);
                     }
@@ -257,7 +259,7 @@ public class ScoopFactory {
             return true;
         }
 
-        System.out.println("this is the end of check : " + clazz.getSimpleName());
+
 
         return false;
     }
@@ -266,7 +268,6 @@ public class ScoopFactory {
     public Object createOrGetScoop(Class<?> clazz) {
       try {
 
-          System.out.println("create or get Scoop method ");
 
           List<Object> depends = new ArrayList<>();
           Object object = context.get(clazz);
@@ -326,7 +327,7 @@ public class ScoopFactory {
                     return createScoop;
                 }
             }
-
+        System.out.println("here's size of prototypes : " + prototypes.size());
             for(Class<?> protoClass : prototypes) {
                 if(parameterType.isAssignableFrom(protoClass)) {
                     Object object1 = createOrGetScoop(protoClass);
@@ -344,6 +345,9 @@ public class ScoopFactory {
 
     private boolean isScoop(Class<?> clazz) {
         for(Annotation anotation : clazz.getAnnotations()) {
+            if(anotation.annotationType() == Component.class) {
+                return true;
+            }
             if(anotation.annotationType().isAnnotationPresent(Component.class)) {
                 return true;
             }

@@ -2,6 +2,7 @@ package com.customframework;
 
 import com.customframework.context.VanillaContext;
 import com.customframework.repo.TestHello;
+import com.customframework.repo.TestRepository;
 import com.customframework.service.OrderService;
 import com.customframework.service.PrototypeCommand;
 import com.customframework.service.SingletonService;
@@ -48,6 +49,9 @@ public class Main {
       System.out.println("p1 = " + p1);
       System.out.println("p2 = " + p2);
       System.out.println("Ссылки равны? " + (p1 == p2));
+      TestRepository testRepository = context.getItem(TestRepository.class);
+
+      System.out.println("this is our repo : " + testRepository);
 
     }
 }
