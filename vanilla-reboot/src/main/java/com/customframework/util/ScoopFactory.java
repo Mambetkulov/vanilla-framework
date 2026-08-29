@@ -1,14 +1,13 @@
 package com.customframework.util;
 
-
 import com.customframework.Scope;
-import com.customframework.annotation.Component;
-import com.customframework.annotation.Inject;
-import com.customframework.annotation.PostConstructor;
-import com.customframework.annotation.ScoopScope;
+import com.customframework.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
@@ -19,6 +18,12 @@ public class ScoopFactory {
     private final Map<Class<?>, Object> context = new HashMap<>();
     private final List<Class<?>> complexContext = new ArrayList<>();
     private final List<Class<?>> prototypes = new ArrayList<>();
+    private final List<Method> methodsWithArgs = new ArrayList<>();
+    private final List<Method> methodsWithoutArgs = new ArrayList<>();
+    private final Map<Class<?>,Object> temporaryContext = new HashMap();
+    private final Properties properties = new Properties();
+    private final Deque<Object> preDestroyQueue = new ArrayDeque<>();
+
 
 
     public List<Class<?>> getPrototypes() {
@@ -26,9 +31,31 @@ public class ScoopFactory {
     }
 
 
+    public ScoopFactory () {
+        System.out.println("ScoopFactory");
+        loadProperties();
+    }
+
+
+    private void loadProperties() {
+        try(InputStream input = getClass().getClassLoader().getResourceAsStream("application.properties")) {
+            if(input != null) {
+                properties.load(input);
+                System.out.println("⚙️ Загружен application.properties! Найдено ключей: " + properties.size());
+            } else {
+                System.out.println("⚠️ Файл application.properties не найден в resources!");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Ошибка загрузки application.properties", e);
+        }
+    }
+
+
 
 
     public Map<Class<?>, Object> instantiate(List<Class<?>> componentClasses) {
+
+        registerShutdownHook();
 
         try {
             for (Class<?> clazz : componentClasses) {
@@ -48,7 +75,9 @@ public class ScoopFactory {
                         Object object = clazz.getDeclaredConstructor().newInstance();
                         System.out.println("scoop " + clazz.getSimpleName() + " was added to context");
                         context.put(clazz, object);
+                        injectValueFields(object);
                         invokePostConstructor(object);
+                        registerScoopsWithPreDestroy(object);
                     }
                 }
             }
@@ -126,8 +155,10 @@ public class ScoopFactory {
                     if (ready) {
                         Object object = targetConstructor.newInstance(objects.toArray());
                         context.put(clazz,object);
+                        injectValueFields(object);
                         System.out.println("🍦 Успешно создали scoop: " + clazz.getSimpleName());// <-- ДОБ
                         invokePostConstructor(object);
+                        registerScoopsWithPreDestroy(object);
                         iterator.remove();
                     }
                 }
@@ -143,13 +174,18 @@ public class ScoopFactory {
 //                invokePostConstructor(obj);
 //            }
 
+
+            invokeConfigurations();
             System.out.println("this is our prototypes size : " + prototypes.size());
+            context.putAll(temporaryContext);
+
+
 
             return context;
 
         } catch (Exception e) {
-            log.error("Scoop instantiation failed", e);
-            throw new RuntimeException(e);
+            log.error("Scoop instantiation failed -> : ", e.getMessage());
+            throw new RuntimeException(e.getMessage());
         }
     }
 
@@ -297,6 +333,7 @@ public class ScoopFactory {
                           }
                       }
                       Object complexObject =  constructor.newInstance(depends.toArray());
+                      injectValueFields(complexObject);
                       invokePostConstructor(complexObject);
                       return complexObject;
 
@@ -304,6 +341,7 @@ public class ScoopFactory {
 
               } else {
                   Object newInstance = clazz.getDeclaredConstructor().newInstance();
+                  injectValueFields(newInstance);
                   invokePostConstructor(newInstance);
                   return newInstance;
 
@@ -344,6 +382,7 @@ public class ScoopFactory {
 
 
     private boolean isScoop(Class<?> clazz) {
+
         for(Annotation anotation : clazz.getAnnotations()) {
             if(anotation.annotationType() == Component.class) {
                 return true;
@@ -351,8 +390,256 @@ public class ScoopFactory {
             if(anotation.annotationType().isAnnotationPresent(Component.class)) {
                 return true;
             }
+
+            if(clazz.isAnnotationPresent(Configuration.class)) {
+                return true;
+            }
         }
         return false;
+    }
+
+
+
+
+
+
+//    private void retrieveMethodsAnnotatedWithScoop(Class<?> clazz) {
+//        try {
+//            Object object = clazz.getDeclaredConstructor().newInstance();
+//            for (Method method : clazz.getDeclaredMethods()) {
+//                if (method.isAnnotationPresent(Scoop.class)) {
+//                    System.out.println("the class name that is annotated with config is : " + clazz.getSimpleName());
+//                    List<Object> list = handleMethodArgs(method);
+//                    method.invoke(object, list.toArray());
+//                }
+//            }
+//        } catch (Exception e) {
+//            System.out.println("something went wrong here it's message : " + e.getMessage());
+//            throw new RuntimeException(e);
+//        }
+//    }
+
+
+    private List<Object> handleMethodWithArgs(Method method) {
+        System.out.println("🐘 this method is handleMethodWithArgs !");
+        List<Object> arguments = new ArrayList<>();
+
+        for(Parameter parameter : method.getParameters()) {
+            System.out.println(" 😼 method name : " + method.getName() + " , method parameters : " + parameter.getType().getSimpleName());
+            Object scoop = createOrGetScoop(parameter.getType());
+            arguments.add(scoop);
+
+        }
+        return arguments;
+    }
+
+
+
+
+
+    private void handleMethodWithoutArgs(Object object) {
+        System.out.println("🐬 this method is handleMethodWithoutArgs !");
+        try {
+            for(Method m : methodsWithoutArgs) {
+                if(m.getReturnType() == void.class) {
+                    m.invoke(object);
+                } else {
+                    Object object1 = m.invoke(object);
+//                    context.put(m.getReturnType(), object1);
+                    temporaryContext.put(m.getReturnType(), object1);
+                    injectValueFields(object1);
+                    invokePostConstructor(object1);
+                    registerScoopsWithPreDestroy(object1);
+                }
+
+            }
+
+
+
+        } catch (Exception e) {
+            System.out.println("something went wrong here it's message : " + e.getMessage());
+            throw new RuntimeException(e);
+        }
+
+    }
+
+
+
+    private void sortMethods(Class<?> clazz) {
+        System.out.println("👾 this method is sortMethods !");
+        methodsWithoutArgs.clear();
+        methodsWithArgs.clear();
+
+        try {
+            for (Method method : clazz.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(Scoop.class)) {
+                    if(method.getParameters().length >= 1) {
+                        methodsWithArgs.add(method);
+                    }
+                    else{
+                        methodsWithoutArgs.add(method);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("something went wrong here it's message : " + e.getMessage());
+            throw new RuntimeException(e);
+        }
+
+    }
+
+
+    private void handleConfiguration(Object object) {
+        System.out.println("😶‍🌫️ this method is handleConfiguration !");
+        try {
+
+            sortMethods(object.getClass());
+            handleMethodWithoutArgs(object);
+
+            System.out.println("size of methods : " + methodsWithoutArgs.size());
+
+            for(Method method : methodsWithArgs) {
+                List<Object> list = handleMethodWithArgs(method);
+                System.out.println("method name : " + method.getName() + " , method parameters : " + list);
+                Object object1 = method.invoke(object, list.toArray());
+                System.out.println("is object is null ? : " + object1);
+
+                System.out.println("🤓🤓🤓🤓🤓🤓 -> " + object1);
+
+                 temporaryContext.put(method.getReturnType(),object1);
+                 injectValueFields(object1);
+                 invokePostConstructor(object1);
+                 registerScoopsWithPreDestroy(object1);
+
+//                context.put(object1.getClass(), object1);
+
+
+                System.out.println("the endo of 🔚🔚🔚");
+            }
+            System.out.println("the endo of 🔚🔚🔚");
+
+
+        } catch (Exception e) {
+            System.out.println("something went wrong here it's message : " + e.getMessage());
+            throw new RuntimeException(e);
+        }
+    }
+
+
+
+      private void invokeConfigurations() {
+            System.out.println("🤢 this method is invokeConfigurations !");
+            for (Object object : context.values()) {
+                System.out.println("welcome to configuration : " + object);
+                Class<?> clazz = object.getClass();
+                if (clazz.isAnnotationPresent(Configuration.class)) {
+                    handleConfiguration(context.get(clazz));
+                    System.out.println("🔍 this is the end of invokeConfigurations ! 👾");
+
+                }
+                System.out.println("context object : " + clazz.getSimpleName());
+
+            }
+            System.out.println("🔍 this is the end of invokeConfigurations !");
+    }
+
+
+
+
+    private void injectValueFields(Object scoop) {
+        Class<?> clazz = scoop.getClass();
+
+        for(Field field : clazz.getDeclaredFields()) {
+            if(field.isAnnotationPresent(Value.class)) {
+
+
+                Value annotation = field.getAnnotation(Value.class);
+                String propertyKey = annotation.value();
+
+                if(propertyKey.startsWith("${") && propertyKey.endsWith("}")) {
+                    propertyKey = propertyKey.substring(2, propertyKey.length() - 1);
+                }
+
+                String rawValue = properties.getProperty(propertyKey);
+
+                if(rawValue == null) {
+                    throw new IllegalStateException("Property key '" + propertyKey + "' not found for field " + field.getName());
+                }
+
+                Object convertedValue = convertType(field.getType(), rawValue);
+
+                try{
+                    field.setAccessible(true);
+                    field.set(scoop,convertedValue);
+                    System.out.println("⚙️ Внедрено значение " + propertyKey + " = " + convertedValue + " в " + clazz.getSimpleName());
+                } catch (Exception e) {
+                    throw new RuntimeException("Не удалось внедрить @Value в поле " + field.getName(), e);
+                }
+            }
+        }
+    }
+
+
+    private Object convertType(Class<?> targetType, String value) {
+        if (targetType == String.class) return value;
+        if (targetType == int.class || targetType == Integer.class) return Integer.parseInt(value);
+        if (targetType == long.class || targetType == Long.class) return Long.parseLong(value);
+        if (targetType == boolean.class || targetType == Boolean.class) return Boolean.parseBoolean(value);
+        if (targetType == double.class || targetType == Double.class) return Double.parseDouble(value);
+
+        throw new IllegalArgumentException("Неподдерживаемый тип поля для @Value: " + targetType.getName());
+    }
+
+
+    private void registerScoopsWithPreDestroy(Object object) {
+          Class<?> clazz = object.getClass();
+          for(Method m : clazz.getDeclaredMethods()) {
+              if(m.isAnnotationPresent(PreDestroy.class)) {
+                  if(m.getParameters().length >= 1) {
+                      throw new IllegalStateException("Метод @PreDestroy в классе " + clazz.getSimpleName() +
+                              " не должен иметь параметры");
+                  }
+
+                  if(m.getReturnType() != void.class) {
+                      throw new IllegalStateException("Метод @PreDestroy в классе " +
+                              clazz.getSimpleName() + " не должен быть возвращающим!");
+                  }
+
+                  preDestroyQueue.add(object);
+              }
+          }
+    }
+
+
+    public void destroy() {
+        Iterator<Object> iterator = preDestroyQueue.descendingIterator();
+
+        while(iterator.hasNext()) {
+
+            Object object = iterator.next();
+
+            for(Method method : object.getClass().getDeclaredMethods()) {
+                if(method.isAnnotationPresent(PreDestroy.class)) {
+                    try {
+                        method.setAccessible(true);
+                        method.invoke(object);
+
+                    } catch (Exception e) {
+                        throw new RuntimeException("Не удалось вызвать @PreDestroy для бина "
+                                + object.getClass().getName(), e);
+                    }
+                }
+            }
+        }
+
+    }
+
+
+    private void registerShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("\\n[Hook] JVM завершает работу! Выполняем очистку...");
+            destroy();
+        } ));
     }
 
 
